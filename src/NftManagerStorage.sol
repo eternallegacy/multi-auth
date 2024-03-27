@@ -6,17 +6,8 @@ import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgrad
 abstract contract NftManagerStorage is OwnableUpgradeable {
     struct SrcNftData {
         address nft;
-        uint256 tokenId;//decimals is 4
+        uint256 tokenId; //decimals is 4
     }
-
-    enum AuthStatus{
-        UnAuth,
-        Authed,
-        Rejected
-    }
-
-    uint32 constant FeeFactor = 10000;
-    mapping(bytes32 => AuthStatus) internal authStatus;// auth[requirer][nft][tokenid][chainid]=true
 
     struct AuthData {
         address nft;
@@ -32,13 +23,22 @@ abstract contract NftManagerStorage is OwnableUpgradeable {
         uint256 height;
     }
 
-    mapping(address => mapping(uint256 => mapping(uint256 => AuthData))) internal authDatas;// nft=>tokenId=>AuthData
-    mapping(address => mapping(uint256 => FeeReceiver)) internal feeReceiversInSrcChain;// nft=>tokenId => receiver
-    mapping(address => mapping(uint256 => mapping(uint256 => FeeReceiver))) internal feeReceiversInToChain;// [nft][tokenId][srcChainId] = nftOwner;
+    enum AuthStatus {
+        UnAuth,
+        Authed,
+        Rejected
+    }
 
-    mapping(address => mapping(uint256 => mapping(uint256 => address[]))) internal authedAddressList;//[nft][tokenId][srcChainId] => address[]
+    uint32 constant FeeFactor = 10000;
+    mapping(bytes32 => AuthStatus) internal authStatus; // auth[requirer][nft][tokenid][chainid]=true
+    mapping(address => mapping(uint256 => mapping(uint256 => AuthData)))
+        internal authDatas; // nft=>tokenId=>AuthData
+    mapping(address => mapping(uint256 => FeeReceiver))
+        internal feeReceiversInSrcChain; // nft=>tokenId => receiver
+    mapping(address => mapping(uint256 => mapping(uint256 => FeeReceiver)))
+        internal feeReceiversInToChain; // [nft][tokenId][srcChainId] = nftOwner;
 
-    mapping(address => bool) internal _signers;// signer=>bool
+    mapping(address => bool) internal _signers; // signer=>bool
     mapping(uint256 => bool) internal _nonce; // for nonce that has already used
 
     string public constant name = "NftManager";
