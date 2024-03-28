@@ -6,7 +6,7 @@ interface INftManager {
         address srcNftAddr,
         uint256 srcTokenId,
         uint256 srcChainId
-    ) external view returns (address, uint32);
+    ) external view returns (address, uint256);
 
     function charge(
         address feeAsset,

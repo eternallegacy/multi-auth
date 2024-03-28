@@ -13,10 +13,6 @@ contract NftTemplate is ERC721 {
 
     mapping(address => bool) internal _signers; // signer=>bool
 
-    string public constant nameSig = "NftTemplate";
-    string public constant version = "1.0";
-    bytes32 public DOMAIN_SEPARATOR;
-
     struct AuthedInfo {
         address srcNft;
         uint256 srcTokenId;
@@ -39,26 +35,13 @@ contract NftTemplate is ERC721 {
     ) ERC721(name_, symbol_) {
         nftManager = INftManager(nftManager_);
         authAdmin = authAdmin_;
-
-        DOMAIN_SEPARATOR = keccak256(
-            abi.encode(
-                keccak256(
-                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
-                ),
-                keccak256(bytes(nameSig)),
-                keccak256(bytes(version)), //version
-                block.chainid,
-                address(this)
-            )
-        );
     }
-
 
     function getAuthAdmin() public view returns (address) {
         return authAdmin;
     }
 
-    function getNftManager() view public returns (address) {
+    function getNftManager() public view returns (address) {
         return address(nftManager);
     }
 
@@ -75,7 +58,7 @@ contract NftTemplate is ERC721 {
             nftManager.isAuthed(msg.sender, srcNft, srcTokenId, srcChainId),
             "NftTemplate: unauthed"
         );
-        (address _receiver, uint32 feeRatio) = nftManager.getFeeArgs(
+        (address _receiver, uint256 feeRatio) = nftManager.getFeeArgs(
             srcNft,
             srcTokenId,
             srcChainId
@@ -111,10 +94,22 @@ contract NftTemplate is ERC721 {
             "NftTemplate: unAuthed"
         );
         uint256 tokenId = getNextTokenId();
-        bytes32 hash = hashAuthData(authedSigner, feeToken, price, srcNft, srcTokenId, srcChainId, msg.sender, nonce);
-        require(_checkInSigs(hash, sig, authedSigner), "NftTemplate: invalid signature");
+        bytes32 hash = hashAuthData(
+            authedSigner,
+            feeToken,
+            price,
+            srcNft,
+            srcTokenId,
+            srcChainId,
+            msg.sender,
+            nonce
+        );
+        require(
+            _checkInSigs(hash, sig, authedSigner),
+            "NftTemplate: invalid signature"
+        );
         //todo
-        (address _receiver, uint32 feeRatio) = nftManager.getFeeArgs(
+        (address _receiver, uint256 feeRatio) = nftManager.getFeeArgs(
             srcNft,
             srcTokenId,
             srcChainId
@@ -139,7 +134,6 @@ contract NftTemplate is ERC721 {
         return authedSigner == signer;
     }
 
-
     // signature methods.
     function _splitSignature(
         bytes memory sig
@@ -147,18 +141,18 @@ contract NftTemplate is ERC721 {
         require(sig.length == 65);
 
         assembly {
-        // first 32 bytes, after the length prefix.
+            // first 32 bytes, after the length prefix.
             r := mload(add(sig, 32))
-        // second 32 bytes.
+            // second 32 bytes.
             s := mload(add(sig, 64))
-        // final byte (first byte of the next 32 bytes).
+            // final byte (first byte of the next 32 bytes).
             v := byte(0, mload(add(sig, 96)))
         }
 
         return (v, r, s);
     }
 
-    function hashAuthData(
+    function hashAuthMintData(
         address authedSigner,
         address feeToken,
         uint256 price,
@@ -170,17 +164,26 @@ contract NftTemplate is ERC721 {
     ) public view returns (bytes32) {
         //ERC-712
         return
-        keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(
-                    abi.encode(
-                        keccak256("authData(address authedSigner,address feeToken, uint256 price, address srcNft, uint256 srcTokenId, uint256 srcChainId, address to,uint256 nonce)"),
-                        authedSigner, feeToken, price, srcNft, srcTokenId, srcChainId, to, nonce
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    DOMAIN_SEPARATOR,
+                    keccak256(
+                        abi.encode(
+                            keccak256(
+                                "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce)"
+                            ),
+                            authedSigner,
+                            feeToken,
+                            price,
+                            srcNft,
+                            srcTokenId,
+                            srcChainId,
+                            to,
+                            nonce
+                        )
                     )
                 )
-            )
-        );
+            );
     }
 }

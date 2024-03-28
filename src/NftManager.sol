@@ -98,7 +98,7 @@ contract NftManager is INftManager, NftManagerStorage {
         address srcNftAddr,
         uint256 srcTokenId,
         uint256 srcChainId
-    ) public view returns (address, uint32) {
+    ) public view returns (address, uint256) {
         AuthData memory data = authDatas[srcNftAddr][srcTokenId][srcChainId];
         if (srcChainId == block.chainid) {
             FeeReceiver memory feeR = feeReceiversInSrcChain[srcNftAddr][
@@ -244,7 +244,7 @@ contract NftManager is INftManager, NftManagerStorage {
         uint256 tokenId,
         uint256 toChainId,
         bool authOpt,
-        uint32 feeRatio
+        uint256 feeRatio
     ) public {
         require(toChainId != block.chainid, "NftManager: invalid toChainId");
         address nftOwner = IERC721(nft).ownerOf(tokenId);
@@ -398,7 +398,7 @@ contract NftManager is INftManager, NftManagerStorage {
         address nft,
         uint256 tokenId,
         bool authOpt,
-        uint32 feeRatio
+        uint256 feeRatio
     ) public {
         address nftOwner = IERC721(nft).ownerOf(tokenId);
         require(msg.sender == nftOwner, "NftManager: invalid nft owner");
@@ -457,31 +457,15 @@ contract NftManager is INftManager, NftManagerStorage {
                     keccak256(
                         abi.encode(
                             keccak256(
-                                "authData(AuthData srcAuthData,address feeReceiver,uint256 height)AuthData(address nft,uint256 tokenId,uint256 srcChainId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
+                                "authDataSig(AuthData srcAuthData,address feeReceiver,uint256 height)AuthData(address nft,uint256 tokenId,uint256 srcChainId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
                             ),
-                            keccak256(abi.encodePacked(srcAuthDataHash)),
+                            srcAuthDataHash,
                             feeReceiver,
                             height
                         )
                     )
                 )
             );
-        keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(
-                    abi.encode(
-                        keccak256(
-                            "authData(AuthData srcAuthData,address feeReceiver,uint256 height)AuthData(address nft,uint256 tokenId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
-                        ),
-                        keccak256(abi.encodePacked(srcAuthDataHash)),
-                        feeReceiver,
-                        height
-                    )
-                )
-            )
-        );
     }
 
     function _hashAuthData(
@@ -492,10 +476,11 @@ contract NftManager is INftManager, NftManagerStorage {
             keccak256(
                 abi.encode(
                     keccak256(
-                        "AuthData(address nft,uint256 tokenId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
+                        "AuthData(address nft,uint256 tokenId,uint256 srcChainId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
                     ),
                     srcAuthData.nft,
                     srcAuthData.tokenId,
+                    srcAuthData.srcChainId,
                     srcAuthData.toChainId,
                     srcAuthData.authOpt,
                     srcAuthData.feeRatio

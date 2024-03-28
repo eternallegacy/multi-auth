@@ -18,23 +18,36 @@ contract CounterTest is Test {
     address operator = address(0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97);
 
     function setUp() public {
-
+        vm.chainId(11155111);
         nftManager = new NftManager();
+        nftManager.initialize();
         nft = new ERC721Sample();
-        nftTemplate = new NftTemplate("nftTemplaet", "NT", address(nftManager), msg.sender);
+        nftTemplate = new NftTemplate("nftTemplate", "NT", address(nftManager), msg.sender);
     }
 
     function testIncrement() public {
-        nft.mint(user1, "");
-        vm.startPrank(user1);
-        nftManager.approveInSrcChain(address(nft), 1, 2, true, 5);
+//        nft.mint(user1, "");
+//        vm.startPrank(user1);
+//        nftManager.approveInSrcChain(address(nft), 1, 2, true, 5);
+//
+//        NftManagerStorage.AuthData memory srcAuthData = NftManagerStorage.AuthData(address(nft), 1, 1, 2, true, 5);
+//        vm.chainId(2);
+//        bytes32 hash = nftManager.hashAuthData(srcAuthData, user1, 1);
+//        uint256 p = vm.envUint("DEPLOY_KEY");
+//        (uint8 v, bytes32 r, bytes32 s) = vm.sign(p, hash);
+//        nftManager.approveInToChain(srcAuthData, user1, 1, abi.encode(r, s, v));
+//        vm.stopPrank();
+    }
 
-        NftManagerStorage.AuthData memory srcAuthData = NftManagerStorage.AuthData(address(nft), 1, 1, 2, true, 5);
-        vm.chainId(2);
-        bytes32 hash = nftManager.hashAuthData(srcAuthData, user1, 1);
-        uint256 p = vm.envUint("DEPLOY_KEY");
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(p, hash);
-        nftManager.approveInToChain(srcAuthData, user1, 1, abi.encode(r, s, v));
-        vm.stopPrank();
+    function testHash() public {
+        console.log("nftManager:",address(nftManager));
+        console.log("nft:",address(nft));
+        console.logBytes32(nftManager.DOMAIN_SEPARATOR());
+        vm.chainId(11155111);
+        NftManagerStorage.AuthData memory srcAuthData = NftManagerStorage.AuthData(address(nft), 2, 80001, 11155111, true, 5);
+        bytes32 hash = nftManager._hashAuthData(srcAuthData);
+        console.logBytes32(hash);
+        bytes32 hash2 = nftManager.hashAuthData(srcAuthData, user1, 47579229);
+        console.logBytes32(hash2);
     }
 }

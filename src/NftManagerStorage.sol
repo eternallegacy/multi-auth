@@ -4,37 +4,40 @@ pragma solidity ^0.8.20;
 import "../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 abstract contract NftManagerStorage is OwnableUpgradeable {
-    struct SrcNftData {
-        address nft;
-        uint256 tokenId; //decimals is 4
-    }
-
     struct AuthData {
         address nft;
         uint256 tokenId;
         uint256 srcChainId;
         uint256 toChainId;
         bool authOpt;
-        uint32 feeRatio;
+        uint256 feeRatio;
     }
 
+    // [src, target]
     struct FeeReceiver {
         address receiver;
         uint256 height;
     }
 
+    // [target]
     enum AuthStatus {
         UnAuth,
         Authed,
         Rejected
     }
 
-    uint32 constant FeeFactor = 10000;
+    uint256 constant FeeFactor = 10000;
+
+    // [target]
     mapping(bytes32 => AuthStatus) internal authStatus; // auth[requirer][nft][tokenid][chainid]=true
+
+    // [src, target]
     mapping(address => mapping(uint256 => mapping(uint256 => AuthData)))
-        internal authDatas; // nft=>tokenId=>AuthData
+        internal authDatas; // nft=>tokenId=>chainId=>AuthData
+    // [src]
     mapping(address => mapping(uint256 => FeeReceiver))
         internal feeReceiversInSrcChain; // nft=>tokenId => receiver
+    // [target]
     mapping(address => mapping(uint256 => mapping(uint256 => FeeReceiver)))
         internal feeReceiversInToChain; // [nft][tokenId][srcChainId] = nftOwner;
 
