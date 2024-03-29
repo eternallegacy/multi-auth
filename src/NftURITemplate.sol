@@ -5,11 +5,14 @@ import "../lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "./INftManager.sol";
 
-contract NftTemplate is ERC721 {
+contract NftURITemplate is ERC721 {
     INftManager internal nftManager;
     address internal authAdmin;
     uint256 internal curId;
     mapping(uint256 => bool) internal nonces;
+
+    mapping(uint256 => string) internal tokenURIs;
+
     mapping(address => bool) internal _signers; // signer=>bool
 
     struct AuthedInfo {
@@ -19,6 +22,8 @@ contract NftTemplate is ERC721 {
     }
 
     mapping(uint256 => AuthedInfo) public authedInfos;
+
+    mapping(uint256 => address) public authedSigners;
 
     string public constant version = "1.0";
     bytes32 public DOMAIN_SEPARATOR;
@@ -64,7 +69,8 @@ contract NftTemplate is ERC721 {
         uint256 price,
         address srcNft,
         uint256 srcTokenId,
-        uint256 srcChainId
+        uint256 srcChainId,
+        string calldata tokenURI
     ) public {
         //todo
         require(
@@ -84,12 +90,71 @@ contract NftTemplate is ERC721 {
         nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
         uint256 tokenId = getNextTokenId();
         _safeMint(to, tokenId);
+        tokenURIs[tokenId] = tokenURI;
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
     }
 
     function getNextTokenId() internal returns (uint256) {
         curId = curId + 1;
         return curId;
+    }
+
+    function tokenURI(
+        uint256 tokenId
+    ) public view override returns (string memory) {
+        _requireOwned(tokenId);
+        string memory baseURI = _baseURI();
+        return
+            bytes(baseURI).length > 0
+                ? string.concat(baseURI, tokenURIs[tokenId])
+                : "";
+    }
+
+    function updateURISig(
+        address authedSigner,
+        uint256 tokenId,
+        string calldata tokenURI,
+        uint256 nonce,
+        bytes calldata sig
+    ) public onlyNonce(nonce) {
+        require(
+            authedSigners[tokenId] == authedSigner,
+            "NftTemplate: invalid authedSigner"
+        );
+        address user = ownerOf(tokenId);
+        require(user == msg.sender, "NftTemplate: invalid msg.sender");
+        AuthedInfo memory info = authedInfos[tokenId];
+        require(
+            nftManager.isAuthed(
+                authedSigner,
+                info.srcNft,
+                info.srcTokenId,
+                info.srcChainId
+            ),
+            "NftTemplate: unAuthed"
+        );
+        bytes32 hash = hashUpdateData(tokenId, tokenURI, nonce);
+        require(
+            _checkInSigs(hash, sig, authedSigner),
+            "NftTemplate: invalid signature"
+        );
+        tokenURIs[tokenId] = tokenURI;
+    }
+
+    function updateURI(uint256 tokenId, string calldata tokenURI) public {
+        address user = ownerOf(tokenId);
+        require(user == msg.sender, "NftTemplate: invalid msg.sender");
+        AuthedInfo memory info = authedInfos[tokenId];
+        require(
+            nftManager.isAuthed(
+                msg.sender,
+                info.srcNft,
+                info.srcTokenId,
+                info.srcChainId
+            ),
+            "NftTemplate: unAuthed"
+        );
+        tokenURIs[tokenId] = tokenURI;
     }
 
     function mintWithSig(
@@ -100,6 +165,7 @@ contract NftTemplate is ERC721 {
         uint256 srcTokenId,
         uint256 srcChainId,
         uint256 nonce,
+        string calldata tokenURI,
         bytes calldata sig
     ) public onlyNonce(nonce) {
         require(
@@ -115,7 +181,8 @@ contract NftTemplate is ERC721 {
             srcTokenId,
             srcChainId,
             msg.sender,
-            nonce
+            nonce,
+            tokenURI
         );
         require(
             _checkInSigs(hash, sig, authedSigner),
@@ -132,16 +199,18 @@ contract NftTemplate is ERC721 {
             address(nftManager),
             (price * feeRatio) / 10000
         );
+        tokenURIs[tokenId] = tokenURI;
         nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
         _safeMint(msg.sender, tokenId);
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
+        authedSigners[tokenId] = authedSigner;
     }
 
     function _checkInSigs(
         bytes32 message,
         bytes calldata sigs,
         address authedSigner
-    ) internal view returns (bool) {
+    ) internal pure returns (bool) {
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(sigs);
         address signer = ecrecover(message, v, r, s);
         return authedSigner == signer;
@@ -173,6 +242,38 @@ contract NftTemplate is ERC721 {
         uint256 srcTokenId,
         uint256 srcChainId,
         address to,
+        uint256 nonce,
+        string calldata tokenURI
+    ) public view returns (bytes32) {
+        //ERC-712
+        return
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    DOMAIN_SEPARATOR,
+                    keccak256(
+                        abi.encode(
+                            keccak256(
+                                "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce,string tokenURI)"
+                            ),
+                            authedSigner,
+                            feeToken,
+                            price,
+                            srcNft,
+                            srcTokenId,
+                            srcChainId,
+                            to,
+                            nonce,
+                            tokenURI
+                        )
+                    )
+                )
+            );
+    }
+
+    function hashUpdateData(
+        uint256 tokenId,
+        string calldata tokenURI,
         uint256 nonce
     ) public view returns (bytes32) {
         //ERC-712
@@ -184,15 +285,10 @@ contract NftTemplate is ERC721 {
                     keccak256(
                         abi.encode(
                             keccak256(
-                                "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce)"
+                                "update(uint256 tokenId,string tokenURI,uint256 nonce)"
                             ),
-                            authedSigner,
-                            feeToken,
-                            price,
-                            srcNft,
-                            srcTokenId,
-                            srcChainId,
-                            to,
+                            tokenId,
+                            tokenURI,
                             nonce
                         )
                     )
