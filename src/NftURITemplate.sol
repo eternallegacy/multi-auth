@@ -9,6 +9,8 @@ contract NftURITemplate is ERC721 {
     INftManager internal nftManager;
     address internal authAdmin;
     uint256 internal curId;
+
+    string internal baseURI;
     mapping(uint256 => bool) internal nonces;
 
     mapping(uint256 => string) internal tokenURIs;
@@ -99,11 +101,15 @@ contract NftURITemplate is ERC721 {
         return curId;
     }
 
+    function setBaseURI(string calldata baseURI_) public {
+        require(authAdmin == msg.sender, "NftTemplate: invalid msg.sender");
+        baseURI = baseURI_;
+    }
+
     function tokenURI(
         uint256 tokenId
     ) public view override returns (string memory) {
         _requireOwned(tokenId);
-        string memory baseURI = _baseURI();
         return
             bytes(baseURI).length > 0
                 ? string.concat(baseURI, tokenURIs[tokenId])

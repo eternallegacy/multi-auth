@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import "../src/NftManager.sol";
 import "../src/NftManagerProxy.sol";
 import "../src/NftTemplate.sol";
+import "../src/NftURITemplate.sol";
 import "../src/mock/ERC721Sample.sol";
 import "../src/NftManagerStorage.sol";
 
@@ -20,12 +21,12 @@ contract NftManagerScriptSepolia is Script {
         uint256 deployerPrivateKey = vm.envUint("DEPLOY_KEY");
         address deployerAddress = vm.envAddress("DEPLOY_ADDRESS");
         address UPGRADE_ADDRESS = vm.envAddress("UPGRADE_ADDRESS");
-        if (false) {
+        if (true) {
             vm.startBroadcast(deployerPrivateKey);
             NftManager nftManager = new NftManager();
             bytes memory data = abi.encodeWithSelector(NftManager.initialize.selector);
             NftManagerProxy nftManagerProxy = new NftManagerProxy(address(nftManager), UPGRADE_ADDRESS, data);
-//            NftTemplate nftTemplate = new NftTemplate("nft template", "NT", address(nftManagerProxy), deployerAddress);
+            NftURITemplate nftTemplate = new NftURITemplate("NftTemplate", "NT", address(nftManagerProxy), deployerAddress);
             vm.stopBroadcast();
             return;
         }
@@ -35,7 +36,7 @@ contract NftManagerScriptSepolia is Script {
             vm.stopBroadcast();
             vm.startBroadcast(upgradePrivateKey);
             NftManagerProxy nftManagerProxy = NftManagerProxy(payable(address(0x1Aa95735855C012130D76A7C736B0C464366C92c)));
-//            nftManagerProxy.upgradeToAndCall(address(nftManager), new bytes(0));
+            //            nftManagerProxy.upgradeToAndCall(address(nftManager), new bytes(0));
             vm.stopBroadcast();
             return;
         }
@@ -54,14 +55,14 @@ contract NftManagerScriptSepolia is Script {
             vm.startBroadcast(deployerPrivateKey);
             //0x501fd84bcf9f431778d62fbb1b55a5b07ddf2f6b
             ERC721Sample srcNft = ERC721Sample(0x501FD84bcF9f431778d62fBb1B55a5B07ddF2F6B);
-//            srcNft.mint(deployerAddress, "");
+            //            srcNft.mint(deployerAddress, "");
             console.log("srcNft:", address(srcNft));
             NftManager nftManager = NftManager(0x0DC57b0cC323f418aa2107095d8E34c3C88004D0);
-            NftManagerStorage.AuthData memory srcAuthData = NftManagerStorage.AuthData(address(srcNft), 2,80001,11155111,true,5);
+            NftManagerStorage.AuthData memory srcAuthData = NftManagerStorage.AuthData(address(srcNft), 2, 80001, 11155111, true, 5);
             bytes32 hash = nftManager.hashAuthData(srcAuthData, deployerAddress, 47579229);
             console.logBytes32(hash);
             //sepolia chainid
-//            nftManager.approveInToChain(address(srcNft), 2, 11155111, true, 5);
+            //            nftManager.approveInToChain(address(srcNft), 2, 11155111, true, 5);
             vm.stopBroadcast();
             return;
         }
