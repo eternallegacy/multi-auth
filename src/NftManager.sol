@@ -29,6 +29,7 @@ contract NftManager is INftManager, NftManagerStorage {
         uint256 toChainId,
         address feeReceiver,
         bool authOpt,
+        uint256 feeRatio,
         uint256 blkHeight
     );
     event ApproveInToChain(
@@ -270,6 +271,7 @@ contract NftManager is INftManager, NftManagerStorage {
             toChainId,
             nftOwner,
             authOpt,
+            feeRatio,
             block.number
         );
     }

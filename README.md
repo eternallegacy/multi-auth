@@ -7,3 +7,4 @@
 # NftTemplate
 
 - mint fee split
+  abigen --abi nftManager.abi --pkg nft_manager --type NftManager --out nft_manager.go

@@ -45,8 +45,8 @@ contract CounterTest is Test {
         console.logBytes32(nftManager.DOMAIN_SEPARATOR());
         vm.chainId(11155111);
         NftManagerStorage.AuthData memory srcAuthData = NftManagerStorage.AuthData(address(nft), 2, 80001, 11155111, true, 5);
-        bytes32 hash = nftManager._hashAuthData(srcAuthData);
-        console.logBytes32(hash);
+//        bytes32 hash = nftManager._hashAuthData(srcAuthData);
+//        console.logBytes32(hash);
         bytes32 hash2 = nftManager.hashAuthData(srcAuthData, user1, 47579229);
         console.logBytes32(hash2);
     }
