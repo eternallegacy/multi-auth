@@ -20,7 +20,6 @@ contract NftManager is INftManager, NftManagerStorage {
         require(block.number <= expiredHeight, "NftManager: sig expired");
         _;
     }
-
     event ApproveInSrcChain(
         address indexed nft,
         address indexed owner,
@@ -52,15 +51,18 @@ contract NftManager is INftManager, NftManagerStorage {
         address from,
         address to,
         uint256 tokenId,
+        uint256 srcChainId,
+        uint256[] toChainIds,
         uint256 blkHeight
     );
-    event Claim(address nft, address owner, uint256 tokenId, uint256 blkHeight);
+    event Claim(address nft, address owner, uint256 tokenId, uint256 srcChainId, uint256[] toChainIds, uint256 blkHeight);
     event TransferOrClaim(
         address indexed nft,
         uint256 tokenId,
         uint256 srcChainId,
         uint256 toChainId,
-        address feeReceiver
+        address feeReceiver,
+        uint256 srcHeight
     );
 
     event AddSigner(address indexed addedAddress);
@@ -103,12 +105,12 @@ contract NftManager is INftManager, NftManagerStorage {
         AuthData memory data = authDatas[srcNftAddr][srcTokenId][srcChainId];
         if (srcChainId == block.chainid) {
             FeeReceiver memory feeR = feeReceiversInSrcChain[srcNftAddr][
-                srcTokenId
+            srcTokenId
             ];
             return (feeR.receiver, data.feeRatio);
         } else {
             FeeReceiver memory feeR = feeReceiversInToChain[srcNftAddr][
-                srcTokenId
+            srcTokenId
             ][srcChainId];
             return (feeR.receiver, data.feeRatio);
         }
@@ -123,7 +125,7 @@ contract NftManager is INftManager, NftManagerStorage {
         uint256 srcChainId
     ) external returns (bool) {
         FeeReceiver memory feeR = feeReceiversInToChain[srcNft][srcTokenId][
-            srcChainId
+        srcChainId
         ];
         require(
             feeR.receiver != address(0),
@@ -146,11 +148,11 @@ contract NftManager is INftManager, NftManagerStorage {
     ) external returns (bool) {
         require(
             authStatus[getKey(msg.sender, srcNft, srcTokenId, srcChainId)] !=
-                AuthStatus.Rejected,
+            AuthStatus.Rejected,
             "NftManager: auth rejected"
         );
         authStatus[
-            getKey(msg.sender, srcNft, srcTokenId, srcChainId)
+        getKey(msg.sender, srcNft, srcTokenId, srcChainId)
         ] = AuthStatus.Authed;
         emit Register(srcNft, msg.sender, srcTokenId, srcChainId);
         return true;
@@ -164,7 +166,7 @@ contract NftManager is INftManager, NftManagerStorage {
     ) external returns (bool) {
         require(
             authStatus[getKey(msg.sender, srcNft, srcTokenId, srcChainId)] !=
-                AuthStatus.Rejected,
+            AuthStatus.Rejected,
             "NftManager: auth rejected"
         );
         delete authStatus[getKey(msg.sender, srcNft, srcTokenId, srcChainId)];
@@ -181,9 +183,9 @@ contract NftManager is INftManager, NftManagerStorage {
         uint256 srcChainId
     ) public view returns (bool) {
         return
-            authDatas[srcNft][srcTokenId][srcChainId].authOpt &&
-            (authStatus[getKey(requirer, srcNft, srcTokenId, srcChainId)] ==
-                AuthStatus.Authed);
+        authDatas[srcNft][srcTokenId][srcChainId].authOpt &&
+        (authStatus[getKey(requirer, srcNft, srcTokenId, srcChainId)] ==
+        AuthStatus.Authed);
     }
 
     // target
@@ -197,11 +199,11 @@ contract NftManager is INftManager, NftManagerStorage {
         uint256 srcChainId
     ) public returns (bool) {
         FeeReceiver memory f = feeReceiversInToChain[srcNft][srcTokenId][
-            srcChainId
+        srcChainId
         ];
         require(f.receiver == msg.sender, "NftManager: invalid nftOwner");
         authStatus[getKey(user, srcNft, srcTokenId, srcChainId)] = AuthStatus
-            .Rejected;
+        .Rejected;
         return true;
     }
     // [target]
@@ -212,11 +214,11 @@ contract NftManager is INftManager, NftManagerStorage {
         uint256 srcChainId
     ) public returns (bool) {
         FeeReceiver memory f = feeReceiversInToChain[srcNft][srcTokenId][
-            srcChainId
+        srcChainId
         ];
         require(f.receiver == msg.sender, "NftManager: invalid nftOwner");
         authStatus[getKey(user, srcNft, srcTokenId, srcChainId)] = AuthStatus
-            .Authed;
+        .Authed;
         return true;
     }
     // [target]
@@ -277,29 +279,22 @@ contract NftManager is INftManager, NftManagerStorage {
     }
 
     // [src] src chain
-    function transferWrapper(address nft, uint256 tokenId, address to) public {
+    function transferWrapper(address nft, uint256 tokenId, address to, uint256[] calldata toChainIds) public {
         IERC721(nft).safeTransferFrom(msg.sender, to, tokenId, new bytes(0));
         feeReceiversInSrcChain[nft][tokenId] = FeeReceiver(to, block.number);
-        emit TransferWrapper(nft, msg.sender, to, tokenId, block.number);
-    }
-
-    // [src == target]
-    function transferWrapperLocal(
-        address nft,
-        uint256 tokenId,
-        address to
-    ) public {
-        IERC721(nft).safeTransferFrom(msg.sender, to, tokenId, new bytes(0));
-        feeReceiversInSrcChain[nft][tokenId] = FeeReceiver(to, block.number);
-        feeReceiversInToChain[nft][tokenId][block.chainid] = FeeReceiver(
-            to,
-            block.number
-        );
-        emit TransferWrapper(nft, msg.sender, to, tokenId, block.number);
+        for (uint i = 0; i < toChainIds.length; i++) {
+            if (block.chainid == toChainIds[i]) {
+                feeReceiversInToChain[nft][tokenId][block.chainid] = FeeReceiver(
+                    to,
+                    block.number
+                );
+            }
+        }
+        emit TransferWrapper(nft, msg.sender, to, tokenId, block.chainid, toChainIds, block.number);
     }
 
     // [src] src chain
-    function claim(address nft, uint256 tokenId) public {
+    function claim(address nft, uint256 tokenId, uint256[] calldata toChainIds) public {
         address nftOwner = IERC721(nft).ownerOf(tokenId);
         require(msg.sender == nftOwner, "NftManager: invalid nft owner");
         require(
@@ -310,51 +305,55 @@ contract NftManager is INftManager, NftManagerStorage {
             nftOwner,
             block.number
         );
-        emit Claim(nft, nftOwner, tokenId, block.number);
-    }
-
-    // [src == target]
-    function claimLocal(address nft, uint256 tokenId) public {
-        address nftOwner = IERC721(nft).ownerOf(tokenId);
-        require(msg.sender == nftOwner, "NftManager: invalid nft owner");
-        require(
-            msg.sender != feeReceiversInSrcChain[nft][tokenId].receiver,
-            "NftManager: invalid fee receiver"
-        );
-        feeReceiversInSrcChain[nft][tokenId] = FeeReceiver(
-            nftOwner,
-            block.number
-        );
-        feeReceiversInToChain[nft][tokenId][block.chainid] = FeeReceiver(
-            nftOwner,
-            block.number
-        );
-        emit Claim(nft, nftOwner, tokenId, block.number);
+        for (uint i = 0; i < toChainIds.length; i++) {
+            if (block.chainid == toChainIds[i]) {
+                feeReceiversInToChain[nft][tokenId][block.chainid] = FeeReceiver(
+                    nftOwner,
+                    block.number
+                );
+            }
+        }
+        emit Claim(nft, nftOwner, tokenId, block.chainid, toChainIds, block.number);
     }
 
     // [target] target chain, use source blockheight to avoid double spend
     function transferOrClaim(
-        AuthData calldata srcAuthData,
+        address srcNft, uint256 srcTokenId, uint256 srcChainId, uint256 toChainId,
         address feeReceiver,
         uint256 srcHeight,
         bytes calldata sigs
     ) public {
         require(
-            srcAuthData.toChainId == block.chainid,
+            toChainId == block.chainid,
             "NftManager: invalid toChainId"
         );
         require(feeReceiver == msg.sender, "NftManager: invalid feeReceiver");
-        bytes32 hash = hashAuthData(srcAuthData, feeReceiver, srcHeight);
+        //todo
+        bytes32 hash = hashTransferOrClaim(srcNft, srcTokenId, srcChainId, toChainId, feeReceiver, srcHeight);
         require(_checkInSigs(hash, sigs), "NftManager: invalid signer");
-        feeReceiversInToChain[srcAuthData.nft][srcAuthData.tokenId][
-            srcAuthData.srcChainId
-        ] = FeeReceiver(feeReceiver, block.number);
-        emit TransferOrClaim(
-            srcAuthData.nft,
-            srcAuthData.tokenId,
-            srcAuthData.srcChainId,
-            srcAuthData.toChainId,
-            feeReceiver
+        feeReceiversInToChain[srcNft][srcChainId][toChainId] = FeeReceiver(feeReceiver, block.number);
+        //todo
+        emit TransferOrClaim(srcNft, srcTokenId, srcChainId, toChainId, feeReceiver, srcHeight);
+    }
+
+    function hashTransferOrClaim(
+        address srcNft, uint256 srcTokenId, uint256 srcChainId, uint256 toChainId, address feeReceiver, uint256 srcHeight
+    ) public view returns (bytes32) {
+        //ERC-712
+        return
+        keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "transferOrClaim(address srcNft,uint256 srcTokenId,uint256 srcChainId,uint256 toChainId,address feeReceiver,uint256 srcHeight)"
+                        ),
+                        srcNft, srcTokenId, srcChainId, toChainId, feeReceiver, srcHeight
+                    )
+                )
+            )
         );
     }
 
@@ -372,18 +371,18 @@ contract NftManager is INftManager, NftManagerStorage {
         require(msg.sender == feeReceiver, "NftManager: invalid feeReceiver");
         require(
             height >
-                feeReceiversInToChain[srcAuthData.nft][srcAuthData.tokenId][
-                    srcAuthData.srcChainId
-                ].height,
+            feeReceiversInToChain[srcAuthData.nft][srcAuthData.tokenId][
+            srcAuthData.srcChainId
+            ].height,
             "NftManager: height check failed"
         );
         bytes32 hash = hashAuthData(srcAuthData, feeReceiver, height);
         require(_checkInSigs(hash, sigs), "NftManager: invalid signer");
         authDatas[srcAuthData.nft][srcAuthData.tokenId][
-            srcAuthData.srcChainId
+        srcAuthData.srcChainId
         ] = srcAuthData;
         feeReceiversInToChain[srcAuthData.nft][srcAuthData.tokenId][
-            srcAuthData.srcChainId
+        srcAuthData.srcChainId
         ] = FeeReceiver(feeReceiver, height);
         emit ApproveInToChain(
             srcAuthData.nft,
@@ -452,22 +451,22 @@ contract NftManager is INftManager, NftManagerStorage {
         //ERC-712
         bytes32 srcAuthDataHash = _hashAuthData(srcAuthData);
         return
-            keccak256(
-                abi.encodePacked(
-                    "\x19\x01",
-                    DOMAIN_SEPARATOR,
-                    keccak256(
-                        abi.encode(
-                            keccak256(
-                                "authDataSig(AuthData srcAuthData,address feeReceiver,uint256 height)AuthData(address nft,uint256 tokenId,uint256 srcChainId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
-                            ),
-                            srcAuthDataHash,
-                            feeReceiver,
-                            height
-                        )
+        keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "authDataSig(AuthData srcAuthData,address feeReceiver,uint256 height)AuthData(address nft,uint256 tokenId,uint256 srcChainId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
+                        ),
+                        srcAuthDataHash,
+                        feeReceiver,
+                        height
                     )
                 )
-            );
+            )
+        );
     }
 
     function _hashAuthData(
@@ -475,19 +474,19 @@ contract NftManager is INftManager, NftManagerStorage {
     ) internal pure returns (bytes32) {
         //ERC-712
         return
-            keccak256(
-                abi.encode(
-                    keccak256(
-                        "AuthData(address nft,uint256 tokenId,uint256 srcChainId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
-                    ),
-                    srcAuthData.nft,
-                    srcAuthData.tokenId,
-                    srcAuthData.srcChainId,
-                    srcAuthData.toChainId,
-                    srcAuthData.authOpt,
-                    srcAuthData.feeRatio
-                )
-            );
+        keccak256(
+            abi.encode(
+                keccak256(
+                    "AuthData(address nft,uint256 tokenId,uint256 srcChainId,uint256 toChainId,bool authOpt,uint256 feeRatio)"
+                ),
+                srcAuthData.nft,
+                srcAuthData.tokenId,
+                srcAuthData.srcChainId,
+                srcAuthData.toChainId,
+                srcAuthData.authOpt,
+                srcAuthData.feeRatio
+            )
+        );
     }
 
     // signature methods.
@@ -497,11 +496,11 @@ contract NftManager is INftManager, NftManagerStorage {
         require(sig.length == 65);
 
         assembly {
-            // first 32 bytes, after the length prefix.
+        // first 32 bytes, after the length prefix.
             r := mload(add(sig, 32))
-            // second 32 bytes.
+        // second 32 bytes.
             s := mload(add(sig, 64))
-            // final byte (first byte of the next 32 bytes).
+        // final byte (first byte of the next 32 bytes).
             v := byte(0, mload(add(sig, 96)))
         }
 

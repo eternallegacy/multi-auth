@@ -111,9 +111,9 @@ contract NftURITemplate is ERC721 {
     ) public view override returns (string memory) {
         _requireOwned(tokenId);
         return
-            bytes(baseURI).length > 0
-                ? string.concat(baseURI, tokenURIs[tokenId])
-                : "";
+        bytes(baseURI).length > 0
+        ? string.concat(baseURI, tokenURIs[tokenId])
+        : "";
     }
 
     function updateURISig(
@@ -229,11 +229,11 @@ contract NftURITemplate is ERC721 {
         require(sig.length == 65);
 
         assembly {
-            // first 32 bytes, after the length prefix.
+        // first 32 bytes, after the length prefix.
             r := mload(add(sig, 32))
-            // second 32 bytes.
+        // second 32 bytes.
             s := mload(add(sig, 64))
-            // final byte (first byte of the next 32 bytes).
+        // final byte (first byte of the next 32 bytes).
             v := byte(0, mload(add(sig, 96)))
         }
 
@@ -253,28 +253,28 @@ contract NftURITemplate is ERC721 {
     ) public view returns (bytes32) {
         //ERC-712
         return
-            keccak256(
-                abi.encodePacked(
-                    "\x19\x01",
-                    DOMAIN_SEPARATOR,
-                    keccak256(
-                        abi.encode(
-                            keccak256(
-                                "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce,string tokenURI)"
-                            ),
-                            authedSigner,
-                            feeToken,
-                            price,
-                            srcNft,
-                            srcTokenId,
-                            srcChainId,
-                            to,
-                            nonce,
-                            tokenURI
-                        )
+        keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce,string tokenURI)"
+                        ),
+                        authedSigner,
+                        feeToken,
+                        price,
+                        srcNft,
+                        srcTokenId,
+                        srcChainId,
+                        to,
+                        nonce,
+                        keccak256(bytes(tokenURI))
                     )
                 )
-            );
+            )
+        );
     }
 
     function hashUpdateData(
@@ -284,21 +284,21 @@ contract NftURITemplate is ERC721 {
     ) public view returns (bytes32) {
         //ERC-712
         return
-            keccak256(
-                abi.encodePacked(
-                    "\x19\x01",
-                    DOMAIN_SEPARATOR,
-                    keccak256(
-                        abi.encode(
-                            keccak256(
-                                "update(uint256 tokenId,string tokenURI,uint256 nonce)"
-                            ),
-                            tokenId,
-                            tokenURI,
-                            nonce
-                        )
+        keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "update(uint256 tokenId,string tokenURI,uint256 nonce)"
+                        ),
+                        tokenId,
+                        keccak256(bytes(tokenURI)),
+                        nonce
                     )
                 )
-            );
+            )
+        );
     }
 }
