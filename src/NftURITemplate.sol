@@ -3,19 +3,21 @@ pragma solidity ^0.8.20;
 
 import "../lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "./INftManager.sol";
 
-contract NftURITemplate is ERC721 {
+contract NftURITemplate is ERC721, Ownable {
+    using SafeERC20 for IERC20;
     INftManager internal nftManager;
     address internal authAdmin;
+    address internal receiver;
     uint256 internal curId;
 
     string internal baseURI;
     mapping(uint256 => bool) internal nonces;
 
     mapping(uint256 => string) internal tokenURIs;
-
-    mapping(address => bool) internal _signers; // signer=>bool
 
     struct AuthedInfo {
         address srcNft;
@@ -36,12 +38,15 @@ contract NftURITemplate is ERC721 {
         _;
     }
 
+    event SetAuthAdmin(address oldAdmin, address newAdmin);
+    event SetReceiver(address oldReceiver, address newReceiver);
+
     constructor(
         string memory name_,
         string memory symbol_,
         address nftManager_,
         address authAdmin_
-    ) ERC721(name_, symbol_) {
+    ) ERC721(name_, symbol_) Ownable(msg.sender) {
         nftManager = INftManager(nftManager_);
         authAdmin = authAdmin_;
         DOMAIN_SEPARATOR = keccak256(
@@ -55,6 +60,26 @@ contract NftURITemplate is ERC721 {
                 address(this)
             )
         );
+    }
+
+    function setAuthAdmin(address newAdmin) public onlyOwner {
+        address old = authAdmin;
+        authAdmin = newAdmin;
+        emit SetAuthAdmin(old, newAdmin);
+    }
+
+    function setReceiver(address newReceiver) public onlyOwner {
+        address old = receiver;
+        receiver = newReceiver;
+        emit SetReceiver(old, newReceiver);
+    }
+
+    function withdrawToken(address token, uint256 amount) public onlyOwner {
+        IERC20(token).safeTransfer(msg.sender, amount);
+    }
+
+    function getReceiver() public view returns (address) {
+        return address(receiver);
     }
 
     function getAuthAdmin() public view returns (address) {
@@ -84,12 +109,17 @@ contract NftURITemplate is ERC721 {
             srcTokenId,
             srcChainId
         );
-        IERC20(feeToken).transferFrom(msg.sender, address(this), price);
-        IERC20(feeToken).approve(
+        uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
+        IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
+        IERC20(feeToken).safeIncreaseAllowance(
             address(nftManager),
             (price * feeRatio) / 10000
         );
         nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
+        uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
+        if (balAfter > balBefore && receiver != address(0)) {
+            IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
+        }
         uint256 tokenId = getNextTokenId();
         _safeMint(to, tokenId);
         tokenURIs[tokenId] = tokenURI;
@@ -111,9 +141,9 @@ contract NftURITemplate is ERC721 {
     ) public view override returns (string memory) {
         _requireOwned(tokenId);
         return
-        bytes(baseURI).length > 0
-        ? string.concat(baseURI, tokenURIs[tokenId])
-        : "";
+            bytes(baseURI).length > 0
+                ? string.concat(baseURI, tokenURIs[tokenId])
+                : "";
     }
 
     function updateURISig(
@@ -200,13 +230,18 @@ contract NftURITemplate is ERC721 {
             srcTokenId,
             srcChainId
         );
-        IERC20(feeToken).transferFrom(msg.sender, address(this), price);
-        IERC20(feeToken).approve(
+        uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
+        IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
+        IERC20(feeToken).safeIncreaseAllowance(
             address(nftManager),
             (price * feeRatio) / 10000
         );
         tokenURIs[tokenId] = tokenURI;
         nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
+        uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
+        if (balAfter > balBefore && receiver != address(0)) {
+            IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
+        }
         _safeMint(msg.sender, tokenId);
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
         authedSigners[tokenId] = authedSigner;
@@ -229,11 +264,11 @@ contract NftURITemplate is ERC721 {
         require(sig.length == 65);
 
         assembly {
-        // first 32 bytes, after the length prefix.
+            // first 32 bytes, after the length prefix.
             r := mload(add(sig, 32))
-        // second 32 bytes.
+            // second 32 bytes.
             s := mload(add(sig, 64))
-        // final byte (first byte of the next 32 bytes).
+            // final byte (first byte of the next 32 bytes).
             v := byte(0, mload(add(sig, 96)))
         }
 
@@ -253,28 +288,28 @@ contract NftURITemplate is ERC721 {
     ) public view returns (bytes32) {
         //ERC-712
         return
-        keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(
-                    abi.encode(
-                        keccak256(
-                            "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce,string tokenURI)"
-                        ),
-                        authedSigner,
-                        feeToken,
-                        price,
-                        srcNft,
-                        srcTokenId,
-                        srcChainId,
-                        to,
-                        nonce,
-                        keccak256(bytes(tokenURI))
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    DOMAIN_SEPARATOR,
+                    keccak256(
+                        abi.encode(
+                            keccak256(
+                                "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce,string tokenURI)"
+                            ),
+                            authedSigner,
+                            feeToken,
+                            price,
+                            srcNft,
+                            srcTokenId,
+                            srcChainId,
+                            to,
+                            nonce,
+                            keccak256(bytes(tokenURI))
+                        )
                     )
                 )
-            )
-        );
+            );
     }
 
     function hashUpdateData(
@@ -284,21 +319,21 @@ contract NftURITemplate is ERC721 {
     ) public view returns (bytes32) {
         //ERC-712
         return
-        keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(
-                    abi.encode(
-                        keccak256(
-                            "update(uint256 tokenId,string tokenURI,uint256 nonce)"
-                        ),
-                        tokenId,
-                        keccak256(bytes(tokenURI)),
-                        nonce
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    DOMAIN_SEPARATOR,
+                    keccak256(
+                        abi.encode(
+                            keccak256(
+                                "update(uint256 tokenId,string tokenURI,uint256 nonce)"
+                            ),
+                            tokenId,
+                            keccak256(bytes(tokenURI)),
+                            nonce
+                        )
                     )
                 )
-            )
-        );
+            );
     }
 }

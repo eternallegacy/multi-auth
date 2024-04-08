@@ -3,14 +3,17 @@ pragma solidity ^0.8.20;
 
 import "../lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
 import "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "./INftManager.sol";
 
-contract NftTemplate is ERC721 {
+contract NftTemplate is ERC721, Ownable {
+    using SafeERC20 for IERC20;
     INftManager internal nftManager;
     address internal authAdmin;
+    address internal receiver;
     uint256 internal curId;
     mapping(uint256 => bool) internal nonces;
-    mapping(address => bool) internal _signers; // signer=>bool
 
     struct AuthedInfo {
         address srcNft;
@@ -29,12 +32,15 @@ contract NftTemplate is ERC721 {
         _;
     }
 
+    event SetAuthAdmin(address oldAdmin, address newAdmin);
+    event SetReceiver(address oldReceiver, address newReceiver);
+
     constructor(
         string memory name_,
         string memory symbol_,
         address nftManager_,
         address authAdmin_
-    ) ERC721(name_, symbol_) {
+    ) ERC721(name_, symbol_) Ownable(msg.sender) {
         nftManager = INftManager(nftManager_);
         authAdmin = authAdmin_;
         DOMAIN_SEPARATOR = keccak256(
@@ -52,6 +58,22 @@ contract NftTemplate is ERC721 {
 
     function getAuthAdmin() public view returns (address) {
         return authAdmin;
+    }
+
+    function setAuthAdmin(address newAdmin) public onlyOwner {
+        address old = authAdmin;
+        authAdmin = newAdmin;
+        emit SetAuthAdmin(old, newAdmin);
+    }
+
+    function setReceiver(address newReceiver) public onlyOwner {
+        address old = receiver;
+        receiver = newReceiver;
+        emit SetReceiver(old, newReceiver);
+    }
+
+    function getReceiver() public view returns (address) {
+        return address(receiver);
     }
 
     function getNftManager() public view returns (address) {
@@ -76,12 +98,17 @@ contract NftTemplate is ERC721 {
             srcTokenId,
             srcChainId
         );
-        IERC20(feeToken).transferFrom(msg.sender, address(this), price);
-        IERC20(feeToken).approve(
+        uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
+        IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
+        IERC20(feeToken).safeIncreaseAllowance(
             address(nftManager),
             (price * feeRatio) / 10000
         );
         nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
+        uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
+        if (balAfter > balBefore && receiver != address(0)) {
+            IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
+        }
         uint256 tokenId = getNextTokenId();
         _safeMint(to, tokenId);
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
@@ -127,12 +154,17 @@ contract NftTemplate is ERC721 {
             srcTokenId,
             srcChainId
         );
-        IERC20(feeToken).transferFrom(msg.sender, address(this), price);
-        IERC20(feeToken).approve(
+        uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
+        IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
+        IERC20(feeToken).safeIncreaseAllowance(
             address(nftManager),
             (price * feeRatio) / 10000
         );
         nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
+        uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
+        if (balAfter > balBefore && receiver != address(0)) {
+            IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
+        }
         _safeMint(msg.sender, tokenId);
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
     }
