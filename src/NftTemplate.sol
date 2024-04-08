@@ -93,25 +93,36 @@ contract NftTemplate is ERC721, Ownable {
             nftManager.isAuthed(msg.sender, srcNft, srcTokenId, srcChainId),
             "NftTemplate: unauthed"
         );
+
+        pay(feeToken, price, srcNft, srcTokenId, srcChainId);
+        uint256 tokenId = getNextTokenId();
+        _safeMint(to, tokenId);
+        authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
+    }
+
+    function pay(address feeToken, uint256 price, address srcNft, uint256 srcTokenId, uint256 srcChainId) internal {
         (address _receiver, uint256 feeRatio) = nftManager.getFeeArgs(
             srcNft,
             srcTokenId,
             srcChainId
         );
-        uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
-        IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
-        IERC20(feeToken).safeIncreaseAllowance(
-            address(nftManager),
-            (price * feeRatio) / 10000
-        );
-        nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
-        uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
-        if (balAfter > balBefore && receiver != address(0)) {
-            IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
+        if (isNativeToken(feeToken)) {
+            require(msg.value >= price, "NftTemplate: msg.value not enough");
+            nftManager.charge{value : (price * feeRatio) / 10000}(feeToken, price, srcNft, srcTokenId, srcChainId);
+            payable(receiver).transfer(msg.value - (price * feeRatio) / 10000);
+        } else {
+            uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
+            IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
+            IERC20(feeToken).safeIncreaseAllowance(
+                address(nftManager),
+                (price * feeRatio) / 10000
+            );
+            nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
+            uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
+            if (balAfter > balBefore && receiver != address(0)) {
+                IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
+            }
         }
-        uint256 tokenId = getNextTokenId();
-        _safeMint(to, tokenId);
-        authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
     }
 
     function getNextTokenId() internal returns (uint256) {
@@ -149,22 +160,7 @@ contract NftTemplate is ERC721, Ownable {
             "NftTemplate: invalid signature"
         );
         //todo
-        (address _receiver, uint256 feeRatio) = nftManager.getFeeArgs(
-            srcNft,
-            srcTokenId,
-            srcChainId
-        );
-        uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
-        IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
-        IERC20(feeToken).safeIncreaseAllowance(
-            address(nftManager),
-            (price * feeRatio) / 10000
-        );
-        nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
-        uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
-        if (balAfter > balBefore && receiver != address(0)) {
-            IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
-        }
+        pay(feeToken, price, srcNft, srcTokenId, srcChainId);
         _safeMint(msg.sender, tokenId);
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
     }
@@ -186,11 +182,11 @@ contract NftTemplate is ERC721, Ownable {
         require(sig.length == 65);
 
         assembly {
-            // first 32 bytes, after the length prefix.
+        // first 32 bytes, after the length prefix.
             r := mload(add(sig, 32))
-            // second 32 bytes.
+        // second 32 bytes.
             s := mload(add(sig, 64))
-            // final byte (first byte of the next 32 bytes).
+        // final byte (first byte of the next 32 bytes).
             v := byte(0, mload(add(sig, 96)))
         }
 
@@ -209,26 +205,30 @@ contract NftTemplate is ERC721, Ownable {
     ) public view returns (bytes32) {
         //ERC-712
         return
-            keccak256(
-                abi.encodePacked(
-                    "\x19\x01",
-                    DOMAIN_SEPARATOR,
-                    keccak256(
-                        abi.encode(
-                            keccak256(
-                                "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce)"
-                            ),
-                            authedSigner,
-                            feeToken,
-                            price,
-                            srcNft,
-                            srcTokenId,
-                            srcChainId,
-                            to,
-                            nonce
-                        )
+        keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce)"
+                        ),
+                        authedSigner,
+                        feeToken,
+                        price,
+                        srcNft,
+                        srcTokenId,
+                        srcChainId,
+                        to,
+                        nonce
                     )
                 )
-            );
+            )
+        );
+    }
+
+    function isNativeToken(address token) internal pure returns (bool) {
+        return token == address(0);
     }
 }

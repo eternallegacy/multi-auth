@@ -14,7 +14,7 @@ interface INftManager {
         address srcNft,
         uint256 srcTokenId,
         uint256 srcChainId
-    ) external returns (bool);
+    ) external payable returns (bool);
 
     function register(
         address srcNft,

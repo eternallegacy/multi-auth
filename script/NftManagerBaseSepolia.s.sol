@@ -8,9 +8,9 @@ import "../src/NftTemplate.sol";
 import "../src/NftURITemplate.sol";
 import "../src/mock/ERC721Sample.sol";
 import "../src/NftManagerStorage.sol";
-//ProxyAdmin 0xEeEAD4de3EF2220B7d5d7371a980b58758e1BC29
-//nftManagerProxy  0x1aa95735855c012130d76a7c736b0c464366c92c
-//NftURITemplate     0x5a074f4c99853700131858d66de22fe3a6b50186
+//ProxyAdmin 0xEeEAD4de3EF2220B7d5d7371a980b58758e1BC29         0x2eB805A0cd246EF4b7C83accb44Ac149989FEDD0
+//nftManagerProxy  0x1aa95735855c012130d76a7c736b0c464366c92c   0xe375160Fd53B99466e42fE44Ab1E999203144BE1
+//NftURITemplate     0x5a074f4c99853700131858d66de22fe3a6b50186  0xAe354cCeD7A8e8d3d1805F942abF5ce2A6b3ad54
 //ERC721Sample
 //forge script script/NftManagerBaseSepolia.s.sol:NftManagerScriptBaseSepolia --legacy --broadcast --rpc-url $BASE_SEPOLIA --via-ir
 contract NftManagerScriptBaseSepolia is Script {
@@ -22,10 +22,12 @@ contract NftManagerScriptBaseSepolia is Script {
     address serverSigner;
 
     function setUp() public {
-        proxyAdmin = ProxyAdmin(0xEeEAD4de3EF2220B7d5d7371a980b58758e1BC29);
-        nftManagerProxy = NftManagerProxy(payable(address(0x1Aa95735855C012130D76A7C736B0C464366C92c)));
-        nftManager = NftManager(0x1Aa95735855C012130D76A7C736B0C464366C92c);
-        serverSigner = address(0x3A67CC6D1d167a399497F98CC9076222C9240802);
+//        proxyAdmin = ProxyAdmin(0xEeEAD4de3EF2220B7d5d7371a980b58758e1BC29);
+//        nftManagerProxy = NftManagerProxy(payable(address(0x1Aa95735855C012130D76A7C736B0C464366C92c)));
+//        nftManager = NftManager(0x1Aa95735855C012130D76A7C736B0C464366C92c);
+//        serverSigner = address(0x3A67CC6D1d167a399497F98CC9076222C9240802);
+//
+//        nftURITemplate = NftURITemplate(0x99685a8d6B0568D6a0c769F07082007447B54Ab2);
     }
 
     function run() public {
@@ -39,8 +41,14 @@ contract NftManagerScriptBaseSepolia is Script {
             NftManager nftManagerImpl = new NftManager();
             bytes memory data = abi.encodeWithSelector(NftManager.initialize.selector);
             NftManagerProxy nftManagerProxy = new NftManagerProxy(address(nftManagerImpl), UPGRADE_ADDRESS, data);
-            NftURITemplate nftTemplate = new NftURITemplate("NftTemplate", "NT", address(nftManagerProxy), deployerAddress);
+            console.log(address(nftManagerProxy));
+            NftURITemplate NftURITemplate = new NftURITemplate("NftTemplate", "NT", address(nftManagerProxy), deployerAddress);
+            console.log(address(NftURITemplate));
             vm.stopBroadcast();
+            return;
+        }
+        if(true){
+            console.log(nftURITemplate.getAuthAdmin());
             return;
         }
         //upgrade contract
@@ -53,7 +61,7 @@ contract NftManagerScriptBaseSepolia is Script {
             vm.stopBroadcast();
             return;
         }
-        if (true) {
+        if (false) {
             vm.startBroadcast(deployerPrivateKey);
             nftManager.addSigner(serverSigner);
             vm.stopBroadcast();

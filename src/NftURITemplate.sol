@@ -104,26 +104,37 @@ contract NftURITemplate is ERC721, Ownable {
             nftManager.isAuthed(msg.sender, srcNft, srcTokenId, srcChainId),
             "NftTemplate: unauthed"
         );
+        pay(feeToken, price, srcNft, srcTokenId, srcChainId);
+        uint256 tokenId = getNextTokenId();
+        _safeMint(to, tokenId);
+        tokenURIs[tokenId] = tokenURI;
+        authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
+    }
+
+
+    function pay(address feeToken, uint256 price, address srcNft, uint256 srcTokenId, uint256 srcChainId) internal {
         (address _receiver, uint256 feeRatio) = nftManager.getFeeArgs(
             srcNft,
             srcTokenId,
             srcChainId
         );
-        uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
-        IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
-        IERC20(feeToken).safeIncreaseAllowance(
-            address(nftManager),
-            (price * feeRatio) / 10000
-        );
-        nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
-        uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
-        if (balAfter > balBefore && receiver != address(0)) {
-            IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
+        if (isNativeToken(feeToken)) {
+            require(msg.value >= price, "NftTemplate: msg.value not enough");
+            nftManager.charge{value : (price * feeRatio) / 10000}(feeToken, price, srcNft, srcTokenId, srcChainId);
+            payable(receiver).transfer(msg.value - (price * feeRatio) / 10000);
+        } else {
+            uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
+            IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
+            IERC20(feeToken).safeIncreaseAllowance(
+                address(nftManager),
+                (price * feeRatio) / 10000
+            );
+            nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
+            uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
+            if (balAfter > balBefore && receiver != address(0)) {
+                IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
+            }
         }
-        uint256 tokenId = getNextTokenId();
-        _safeMint(to, tokenId);
-        tokenURIs[tokenId] = tokenURI;
-        authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
     }
 
     function getNextTokenId() internal returns (uint256) {
@@ -143,7 +154,7 @@ contract NftURITemplate is ERC721, Ownable {
         return
             bytes(baseURI).length > 0
                 ? string.concat(baseURI, tokenURIs[tokenId])
-                : "";
+                : tokenURIs[tokenId];
     }
 
     function updateURISig(
@@ -225,23 +236,7 @@ contract NftURITemplate is ERC721, Ownable {
             "NftTemplate: invalid signature"
         );
         //todo
-        (address _receiver, uint256 feeRatio) = nftManager.getFeeArgs(
-            srcNft,
-            srcTokenId,
-            srcChainId
-        );
-        uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
-        IERC20(feeToken).safeTransferFrom(msg.sender, address(this), price);
-        IERC20(feeToken).safeIncreaseAllowance(
-            address(nftManager),
-            (price * feeRatio) / 10000
-        );
-        tokenURIs[tokenId] = tokenURI;
-        nftManager.charge(feeToken, price, srcNft, srcTokenId, srcChainId);
-        uint256 balAfter = IERC20(feeToken).balanceOf(address(this));
-        if (balAfter > balBefore && receiver != address(0)) {
-            IERC20(feeToken).safeTransfer(receiver, balAfter - balBefore);
-        }
+        pay(feeToken, price, srcNft, srcTokenId, srcChainId);
         _safeMint(msg.sender, tokenId);
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
         authedSigners[tokenId] = authedSigner;
@@ -335,5 +330,9 @@ contract NftURITemplate is ERC721, Ownable {
                     )
                 )
             );
+    }
+
+    function isNativeToken(address token) internal pure returns (bool) {
+        return token == address(0);
     }
 }

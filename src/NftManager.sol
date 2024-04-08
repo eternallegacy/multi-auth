@@ -123,7 +123,7 @@ contract NftManager is INftManager, NftManagerStorage {
         address srcNft,
         uint256 srcTokenId,
         uint256 srcChainId
-    ) external returns (bool) {
+    ) external payable returns (bool) {
         FeeReceiver memory feeR = feeReceiversInToChain[srcNft][srcTokenId][
         srcChainId
         ];
@@ -132,11 +132,15 @@ contract NftManager is INftManager, NftManagerStorage {
             "NftManager: charge invalid receiver"
         );
         AuthData memory data = authDatas[srcNft][srcTokenId][srcChainId];
-        IERC20(feeAsset).safeTransferFrom(
-            msg.sender,
-            feeR.receiver,
-            (price * data.feeRatio) / FeeFactor
-        );
+        if (isNativeToken(feeAsset)) {
+            require(msg.value >= (price * data.feeRatio) / FeeFactor, "NftManager: msg.value not enough");
+        } else {
+            IERC20(feeAsset).safeTransferFrom(
+                msg.sender,
+                feeR.receiver,
+                (price * data.feeRatio) / FeeFactor
+            );
+        }
         return true;
     }
 
@@ -505,5 +509,9 @@ contract NftManager is INftManager, NftManagerStorage {
         }
 
         return (v, r, s);
+    }
+
+    function isNativeToken(address token) internal pure returns (bool) {
+        return token == address(0);
     }
 }
