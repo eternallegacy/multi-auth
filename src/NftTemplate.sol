@@ -87,7 +87,7 @@ contract NftTemplate is ERC721, Ownable {
         address srcNft,
         uint256 srcTokenId,
         uint256 srcChainId
-    ) public {
+    ) public payable {
         //todo
         require(
             nftManager.isAuthed(msg.sender, srcNft, srcTokenId, srcChainId),
@@ -100,7 +100,13 @@ contract NftTemplate is ERC721, Ownable {
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
     }
 
-    function pay(address feeToken, uint256 price, address srcNft, uint256 srcTokenId, uint256 srcChainId) internal {
+    function pay(
+        address feeToken,
+        uint256 price,
+        address srcNft,
+        uint256 srcTokenId,
+        uint256 srcChainId
+    ) internal {
         (address _receiver, uint256 feeRatio) = nftManager.getFeeArgs(
             srcNft,
             srcTokenId,
@@ -108,7 +114,13 @@ contract NftTemplate is ERC721, Ownable {
         );
         if (isNativeToken(feeToken)) {
             require(msg.value >= price, "NftTemplate: msg.value not enough");
-            nftManager.charge{value : (price * feeRatio) / 10000}(feeToken, price, srcNft, srcTokenId, srcChainId);
+            nftManager.charge{value: (price * feeRatio) / 10000}(
+                feeToken,
+                price,
+                srcNft,
+                srcTokenId,
+                srcChainId
+            );
             payable(receiver).transfer(msg.value - (price * feeRatio) / 10000);
         } else {
             uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
@@ -139,7 +151,7 @@ contract NftTemplate is ERC721, Ownable {
         uint256 srcChainId,
         uint256 nonce,
         bytes calldata sig
-    ) public onlyNonce(nonce) {
+    ) public payable onlyNonce(nonce) {
         require(
             nftManager.isAuthed(authedSigner, srcNft, srcTokenId, srcChainId),
             "NftTemplate: unAuthed"
@@ -182,11 +194,11 @@ contract NftTemplate is ERC721, Ownable {
         require(sig.length == 65);
 
         assembly {
-        // first 32 bytes, after the length prefix.
+            // first 32 bytes, after the length prefix.
             r := mload(add(sig, 32))
-        // second 32 bytes.
+            // second 32 bytes.
             s := mload(add(sig, 64))
-        // final byte (first byte of the next 32 bytes).
+            // final byte (first byte of the next 32 bytes).
             v := byte(0, mload(add(sig, 96)))
         }
 
@@ -205,27 +217,27 @@ contract NftTemplate is ERC721, Ownable {
     ) public view returns (bytes32) {
         //ERC-712
         return
-        keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(
-                    abi.encode(
-                        keccak256(
-                            "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce)"
-                        ),
-                        authedSigner,
-                        feeToken,
-                        price,
-                        srcNft,
-                        srcTokenId,
-                        srcChainId,
-                        to,
-                        nonce
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    DOMAIN_SEPARATOR,
+                    keccak256(
+                        abi.encode(
+                            keccak256(
+                                "authMintDataSig(address authedSigner,address feeToken,uint256 price,address srcNft,uint256 srcTokenId,uint256 srcChainId,address to,uint256 nonce)"
+                            ),
+                            authedSigner,
+                            feeToken,
+                            price,
+                            srcNft,
+                            srcTokenId,
+                            srcChainId,
+                            to,
+                            nonce
+                        )
                     )
                 )
-            )
-        );
+            );
     }
 
     function isNativeToken(address token) internal pure returns (bool) {

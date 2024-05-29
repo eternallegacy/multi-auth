@@ -33,10 +33,10 @@ abstract contract NftManagerStorage is OwnableUpgradeable {
 
     // [src, target]
     mapping(address => mapping(uint256 => mapping(uint256 => AuthData)))
-        internal authDatas; // nft=>tokenId=>chainId=>AuthData
+        public authDatas; // nft=>tokenId=>chainId=>AuthData
     // [src]
     mapping(address => mapping(uint256 => FeeReceiver))
-        internal feeReceiversInSrcChain; // nft=>tokenId => receiver
+        public feeReceiversInSrcChain; // nft=>tokenId => receiver
     // [target]
     mapping(address => mapping(uint256 => mapping(uint256 => FeeReceiver)))
         internal feeReceiversInToChain; // [nft][tokenId][srcChainId] = nftOwner;

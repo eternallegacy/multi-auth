@@ -75,7 +75,11 @@ contract NftURITemplate is ERC721, Ownable {
     }
 
     function withdrawToken(address token, uint256 amount) public onlyOwner {
-        IERC20(token).safeTransfer(msg.sender, amount);
+        if (isNativeToken(token)) {
+            payable(msg.sender).transfer(amount);
+        } else {
+            IERC20(token).safeTransfer(msg.sender, amount);
+        }
     }
 
     function getReceiver() public view returns (address) {
@@ -98,7 +102,7 @@ contract NftURITemplate is ERC721, Ownable {
         uint256 srcTokenId,
         uint256 srcChainId,
         string calldata tokenURI
-    ) public {
+    ) public payable {
         //todo
         require(
             nftManager.isAuthed(msg.sender, srcNft, srcTokenId, srcChainId),
@@ -111,8 +115,13 @@ contract NftURITemplate is ERC721, Ownable {
         authedInfos[tokenId] = AuthedInfo(srcNft, srcTokenId, srcChainId);
     }
 
-
-    function pay(address feeToken, uint256 price, address srcNft, uint256 srcTokenId, uint256 srcChainId) internal {
+    function pay(
+        address feeToken,
+        uint256 price,
+        address srcNft,
+        uint256 srcTokenId,
+        uint256 srcChainId
+    ) internal {
         (address _receiver, uint256 feeRatio) = nftManager.getFeeArgs(
             srcNft,
             srcTokenId,
@@ -120,7 +129,13 @@ contract NftURITemplate is ERC721, Ownable {
         );
         if (isNativeToken(feeToken)) {
             require(msg.value >= price, "NftTemplate: msg.value not enough");
-            nftManager.charge{value : (price * feeRatio) / 10000}(feeToken, price, srcNft, srcTokenId, srcChainId);
+            nftManager.charge{value: (price * feeRatio) / 10000}(
+                feeToken,
+                price,
+                srcNft,
+                srcTokenId,
+                srcChainId
+            );
             payable(receiver).transfer(msg.value - (price * feeRatio) / 10000);
         } else {
             uint256 balBefore = IERC20(feeToken).balanceOf(address(this));
@@ -214,7 +229,7 @@ contract NftURITemplate is ERC721, Ownable {
         uint256 nonce,
         string calldata tokenURI,
         bytes calldata sig
-    ) public onlyNonce(nonce) {
+    ) public payable onlyNonce(nonce) {
         require(
             nftManager.isAuthed(authedSigner, srcNft, srcTokenId, srcChainId),
             "NftTemplate: unAuthed"
